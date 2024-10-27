@@ -6,10 +6,9 @@ type Branch =
 type PullRequest =
   Endpoints["GET /repos/{owner}/{repo}/pulls"]["response"]["data"][0];
 
+const baseUrlFixed = `${import.meta.env.BASE_URL}/`.replace(/\/\//g, "/");
 async function fetchDownload() {
-  const response = await fetch(
-    `${import.meta.env.BASE_URL}/downloads.json`.replace(/\/\//g, "/"),
-  );
+  const response = await fetch(`${baseUrlFixed}/downloads.json`);
   if (!response.ok) {
     throw new Error("Failed to fetch download infos");
   }
@@ -40,9 +39,7 @@ function App() {
         <For each={downloads()}>
           {(download) => {
             return (
-              <a
-                href={`${import.meta.env.BASE_URL}${download.dirname}/index.html`}
-              >
+              <a href={`${baseUrlFixed}${download.dirname}/index.html`}>
                 <button type="button">
                   {download.source.type === "branch"
                     ? `Branch ${download.source.branch.name}`
