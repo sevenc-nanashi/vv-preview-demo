@@ -1,0 +1,65 @@
+name: "Update Pages"
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  update_pages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: |
+          npm install -g pnpm
+          pnpm install
+
+      - name: Load secrets
+        run: |
+          cat - <<EOF | base64 -d > .env
+          ${{ secrets.ENV_BASE64 }}
+          EOF
+          cat - <<EOF | base64 -d > private-key.pem
+          ${{ secrets.PRIVATE_KEY_BASE64 }}
+          EOF
+
+          sha256sum .env private-key.pem
+
+      - name: Build Pages
+        run: |
+          pnpm run collect
+
+          pnpm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
