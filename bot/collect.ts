@@ -182,7 +182,6 @@ const downloadTargets = await Promise.all(
       log.info(`Extracting artifact to ${destination}`);
       await fs.mkdir(destination, { recursive: true });
       await pipeline(
-        // @ts-expect-error 何故かエラーが出る
         Readable.fromWeb(response.body),
         unzip.Extract({
           path: destination,
@@ -203,13 +202,15 @@ const downloadTargets = await Promise.all(
         const deployInfoMessage = [
           "<!-- deploy -->",
           `プレビュー：<https://sevenc7c.com/vv-preview-demo-bot/${dirname}/>`,
-          `更新時点でのコミットハッシュ：${source.pullRequest.head.sha}`,
+          `更新時点でのコミットハッシュ：[\`${source.pullRequest.head.sha.slice(0, 7)}\`](https://github.com/${
+            source.pullRequest.head.repo.full_name
+          }/commit/${source.pullRequest.head.sha})`,
         ].join("\n");
         const maybeDeployInfo = comments.find(
           (comment) =>
             comment.user &&
             appInfo.data &&
-            comment.user.id === appInfo.data.id &&
+            comment.user.login === `${appInfo.data.slug}[bot]` &&
             comment.body?.startsWith("<!-- deploy -->"),
         );
         if (!maybeDeployInfo) {
