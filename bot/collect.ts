@@ -190,6 +190,53 @@ const downloadTargets = await Promise.all(
       );
       log.success("Done.");
 
+      if (source.type === "pullRequest") {
+        log.info("Fetching comments...");
+        const comments = await octokit.paginate(
+          "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+          {
+            owner: "sevenc-nanashi",
+            repo: "vv-preview-demo-page",
+            issue_number: source.pullRequest.number,
+          },
+        );
+        const deployInfoMessage = [
+          "<!-- deploy -->",
+          `プレビュー：<https://sevenc7c.com/vv-preview-demo-bot/${dirname}/>`,
+          `更新時点でのコミットハッシュ：${source.pullRequest.head.sha}`,
+        ].join("\n");
+        const maybeDeployInfo = comments.find(
+          (comment) =>
+            comment.user &&
+            appInfo.data &&
+            comment.user.id === appInfo.data.id &&
+            comment.body?.startsWith("<!-- deploy -->"),
+        );
+        if (!maybeDeployInfo) {
+          log.info("Adding deploy info...");
+          await octokit.request(
+            "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+            {
+              owner: "sevenc-nanashi",
+              repo: "vv-preview-demo-page",
+              issue_number: source.pullRequest.number,
+              body: deployInfoMessage,
+            },
+          );
+        } else {
+          log.info("Updating deploy info...");
+          await octokit.request(
+            "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
+            {
+              owner: "sevenc-nanashi",
+              repo: "vv-preview-demo-page",
+              comment_id: maybeDeployInfo.id,
+              body: deployInfoMessage,
+            },
+          );
+        }
+      }
+
       return { source, dirname };
     }),
 );
