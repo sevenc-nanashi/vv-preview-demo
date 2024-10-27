@@ -25,9 +25,9 @@
   },
   "dependencies": {
     "@core/asyncutil": "npm:@jsr/core__asyncutil@^1.2.0",
+    "@logtape/logtape": "^0.6.3",
     "@octokit/plugin-paginate-rest": "^11.3.5",
     "base64-js": "1.5.1",
-    "consola": "^3.2.3",
     "dotenv": "^16.4.5",
     "octokit": "^4.0.2",
     "solid-js": "^1.9.2",

@@ -6,9 +6,37 @@ import { paginateRest } from "@octokit/plugin-paginate-rest";
 import { Semaphore } from "@core/asyncutil";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import consola from "consola";
-
+import * as logtape from "@logtape/logtape";
 import unzip from "unzip-stream";
+
+await logtape.configure({
+  sinks: {
+    console: logtape.getConsoleSink({
+      formatter: logtape.getAnsiColorFormatter({
+        level: "full",
+        categoryColor: "cyan",
+      }),
+    }),
+  },
+  loggers: [
+    {
+      category: "app",
+      level: "info",
+      sinks: ["console"],
+    },
+
+    {
+      category: ["logtape", "meta"],
+      level: "warning",
+      sinks: ["console"],
+    },
+  ],
+});
+
+const rootLogger = logtape.getLogger("app");
+const mainRepo = "sevenc-nanashi/vv-preview-demo-page";
+
+const [mainRepoOwner, mainRepoName] = mainRepo.split("/");
 
 const getEnv = (name: string) => {
   const value = process.env[name];
@@ -34,7 +62,7 @@ const appInfo = await app.octokit.request("GET /app");
 if (!appInfo.data) {
   throw new Error("Failed to get app info.");
 }
-consola.info(`Running as ${appInfo.data.name}.`);
+rootLogger.info`Running as ${appInfo.data.name}.`;
 
 const { data: installations } = await app.octokit.request(
   "GET /app/installations",
@@ -44,8 +72,8 @@ const installationId = installations[0].id;
 const octokit = await app.getInstallationOctokit(installationId);
 
 const branches = await octokit.paginate("GET /repos/{owner}/{repo}/branches", {
-  owner: "sevenc-nanashi",
-  repo: "vv-preview-demo-page",
+  owner: mainRepoOwner,
+  repo: mainRepoName,
 });
 const filteredBranches = branches.filter(
   (branch) => branch.name.startsWith("project-") || branch.name === "main",
@@ -54,20 +82,32 @@ const filteredBranches = branches.filter(
 const semaphore = new Semaphore(5);
 
 const pullRequests = await octokit.paginate("GET /repos/{owner}/{repo}/pulls", {
-  owner: "sevenc-nanashi",
-  repo: "vv-preview-demo-page",
+  owner: mainRepoOwner,
+  repo: mainRepoName,
   state: "open",
 });
 const downloadTargets = await Promise.all(
   [
-    filteredBranches.map((branch) => ({ type: "branch", branch }) as const),
+    filteredBranches.map(
+      (branch) =>
+        ({
+          type: "branch",
+          branch,
+          repo: [mainRepoOwner, mainRepoName],
+        }) as const,
+    ),
     pullRequests.map(
-      (pullRequest) => ({ type: "pullRequest", pullRequest }) as const,
+      (pullRequest) =>
+        ({
+          type: "pullRequest",
+          pullRequest,
+          repo: [pullRequest.head.repo.owner.login, pullRequest.head.repo.name],
+        }) as const,
     ),
   ]
     .flat()
     .map(async (source) => {
-      const log = consola.withTag(
+      const log = rootLogger.getChild(
         source.type === "branch"
           ? `Branch ${source.branch.name}`
           : `PR #${source.pullRequest.number}`,
@@ -78,8 +118,8 @@ const downloadTargets = await Promise.all(
       } = await octokit.request(
         "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
         {
-          owner: "sevenc-nanashi",
-          repo: "vv-preview-demo-page",
+          owner: source.repo[0],
+          repo: source.repo[1],
           ref:
             source.type === "branch"
               ? source.branch.name
@@ -111,15 +151,15 @@ const downloadTargets = await Promise.all(
           const { data: job } = await octokit.request(
             "GET /repos/{owner}/{repo}/actions/jobs/{job_id}",
             {
-              owner: "sevenc-nanashi",
-              repo: "vv-preview-demo-page",
+              owner: source.repo[0],
+              repo: source.repo[1],
               job_id: jobId,
             },
           );
           if (job.status === "completed") {
             return true;
           }
-          log.info(`Waiting for job #${jobId} to complete...`);
+          log.info`Waiting for job #${jobId} to complete...`;
           await new Promise((resolve) => setTimeout(resolve, 10000));
           return false;
         });
@@ -134,8 +174,8 @@ const downloadTargets = await Promise.all(
       const buildPage = await octokit.request(
         "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
         {
-          owner: "sevenc-nanashi",
-          repo: "vv-preview-demo-page",
+          owner: source.repo[0],
+          repo: source.repo[1],
           run_id: Number.parseInt(runId),
         },
       );
@@ -152,22 +192,22 @@ const downloadTargets = await Promise.all(
         log.error("No download URL found");
         return;
       }
-      log.info(`Fetching artifact URL from ${downloadUrl}`);
+      log.info`Fetching artifact URL from ${downloadUrl}`;
 
       const { url: innerDownloadUrl } = await octokit.request(
         "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
         {
-          owner: "sevenc-nanashi",
-          repo: "vv-preview-demo-page",
+          owner: source.repo[0],
+          repo: source.repo[1],
           artifact_id: artifact.id,
           archive_format: "zip",
         },
       );
 
-      log.info(`Downloading artifact from ${innerDownloadUrl}`);
+      log.info`Downloading artifact from ${innerDownloadUrl}`;
       const response = await fetch(innerDownloadUrl);
       if (!response.ok) {
-        log.error(`Failed to download artifact: ${response.statusText}`);
+        log.error`Failed to download artifact: ${response.statusText}`;
         return;
       }
       if (!response.body) {
@@ -179,7 +219,7 @@ const downloadTargets = await Promise.all(
           ? source.branch.name
           : `pr-${source.pullRequest.number}`;
       const destination = `${publicDir}/${dirname}`;
-      log.info(`Extracting artifact to ${destination}`);
+      log.info`Extracting artifact to ${destination}`;
       await fs.mkdir(destination, { recursive: true });
       await pipeline(
         Readable.fromWeb(response.body),
@@ -187,15 +227,15 @@ const downloadTargets = await Promise.all(
           path: destination,
         }),
       );
-      log.success("Done.");
+      log.info("Done.");
 
       if (source.type === "pullRequest") {
         log.info("Fetching comments...");
         const comments = await octokit.paginate(
           "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
           {
-            owner: "sevenc-nanashi",
-            repo: "vv-preview-demo-page",
+            owner: mainRepoOwner,
+            repo: mainRepoName,
             issue_number: source.pullRequest.number,
           },
         );
@@ -218,8 +258,8 @@ const downloadTargets = await Promise.all(
           await octokit.request(
             "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
             {
-              owner: "sevenc-nanashi",
-              repo: "vv-preview-demo-page",
+              owner: mainRepoOwner,
+              repo: mainRepoName,
               issue_number: source.pullRequest.number,
               body: deployInfoMessage,
             },
@@ -229,8 +269,8 @@ const downloadTargets = await Promise.all(
           await octokit.request(
             "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
             {
-              owner: "sevenc-nanashi",
-              repo: "vv-preview-demo-page",
+              owner: mainRepoOwner,
+              repo: mainRepoName,
               comment_id: maybeDeployInfo.id,
               body: deployInfoMessage,
             },
@@ -249,6 +289,4 @@ await fs.writeFile(
   `${publicDir}/downloads.json`,
   JSON.stringify(successfulDownloads, null, 2),
 );
-consola.success(
-  `Done: ${successfulDownloads.length} downloads / ${downloadTargets.length} attempts.`,
-);
+rootLogger.info`Done: ${successfulDownloads.length} downloads / ${downloadTargets.length} attempts.`;

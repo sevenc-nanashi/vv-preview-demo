@@ -11,15 +11,15 @@ importers:
       '@core/asyncutil':
         specifier: npm:@jsr/core__asyncutil@^1.2.0
         version: '@jsr/core__asyncutil@1.2.0'
+      '@logtape/logtape':
+        specifier: ^0.6.3
+        version: 0.6.3
       '@octokit/plugin-paginate-rest':
         specifier: ^11.3.5
         version: 11.3.5(@octokit/core@6.1.2)
       base64-js:
         specifier: 1.5.1
         version: 1.5.1
-      consola:
-        specifier: ^3.2.3
-        version: 3.2.3
       dotenv:
         specifier: ^16.4.5
         version: 16.4.5
@@ -500,6 +500,9 @@ packages:
   '@jsr/core__asyncutil@1.2.0':
     resolution: {integrity: sha512-ic0VDrZ6b/Qr42M4yYraNV6yjClCzAUw/ADD9PiCw0h3+Le94EHzpT2WcdKkDehIHDiwQ8cgM6thvRHEj71PEw==, tarball: https://npm.jsr.io/~/11/@jsr/core__asyncutil/1.2.0.tgz}
 
+  '@logtape/logtape@0.6.3':
+    resolution: {integrity: sha512-QX0ygk82ANyODIFhvVAOaKwgFHjbrXAaTkx8dRiISyf10QkhuNV6E79R9RNB8oRMxQbbT8h+ZcrFNHIUtszn7g==}
+
   '@octokit/app@15.1.0':
     resolution: {integrity: sha512-TkBr7QgOmE6ORxvIAhDbZsqPkF7RSqTY4pLTtUQCvr6dTXqvi2fFo46q3h1lxlk/sGMQjqyZ0kEahkD/NyzOHg==}
     engines: {node: '>= 18'}
@@ -755,10 +758,6 @@ packages:
 
   chainsaw@0.1.0:
     resolution: {integrity: sha512-75kWfWt6MEKNC8xYXIdRpDehRYY/tNSgwKaJq+dbbDcxORuVrrQ+SEHoWsniVn9XPYfP4gmdWIeDk/4YNp1rNQ==}
-
-  consola@3.2.3:
-    resolution: {integrity: sha512-I5qxpzLv+sJhTVEoLYNcTW+bThDCPsit0vLNKShZx6rLtpilNpmmeTPaeqJb9ZE9dV3DGaeby6Vuhrw38WjeyQ==}
-    engines: {node: ^14.18.0 || >=16.10.0}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -1309,6 +1308,8 @@ snapshots:
 
   '@jsr/core__asyncutil@1.2.0': {}
 
+  '@logtape/logtape@0.6.3': {}
+
   '@octokit/app@15.1.0':
     dependencies:
       '@octokit/auth-app': 7.1.1
@@ -1581,8 +1582,6 @@ snapshots:
   chainsaw@0.1.0:
     dependencies:
       traverse: 0.3.9
-
-  consola@3.2.3: {}
 
   convert-source-map@2.0.0: {}
 
