@@ -93,7 +93,6 @@ const downloadTargets = await Promise.all(
         ({
           type: "branch",
           branch,
-          repo: [mainRepoOwner, mainRepoName],
         }) as const,
     ),
     pullRequests.map(
@@ -101,7 +100,6 @@ const downloadTargets = await Promise.all(
         ({
           type: "pullRequest",
           pullRequest,
-          repo: [pullRequest.head.repo.owner.login, pullRequest.head.repo.name],
         }) as const,
     ),
   ]
@@ -118,8 +116,8 @@ const downloadTargets = await Promise.all(
       } = await octokit.request(
         "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
         {
-          owner: source.repo[0],
-          repo: source.repo[1],
+          owner: mainRepoOwner,
+          repo: mainRepoName,
           ref:
             source.type === "branch"
               ? source.branch.name
@@ -151,8 +149,8 @@ const downloadTargets = await Promise.all(
           const { data: job } = await octokit.request(
             "GET /repos/{owner}/{repo}/actions/jobs/{job_id}",
             {
-              owner: source.repo[0],
-              repo: source.repo[1],
+              owner: mainRepoOwner,
+              repo: mainRepoName,
               job_id: jobId,
             },
           );
@@ -174,8 +172,8 @@ const downloadTargets = await Promise.all(
       const buildPage = await octokit.request(
         "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
         {
-          owner: source.repo[0],
-          repo: source.repo[1],
+          owner: mainRepoOwner,
+          repo: mainRepoName,
           run_id: Number.parseInt(runId),
         },
       );
@@ -197,8 +195,8 @@ const downloadTargets = await Promise.all(
       const { url: innerDownloadUrl } = await octokit.request(
         "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
         {
-          owner: source.repo[0],
-          repo: source.repo[1],
+          owner: mainRepoOwner,
+          repo: mainRepoName,
           artifact_id: artifact.id,
           archive_format: "zip",
         },
