@@ -48,9 +48,9 @@ jobs:
 
       - name: Build Pages
         run: |
-          pnpm run collect
+          pnpm run bot:collect
 
-          pnpm run build
+          pnpm run build --base /vv-preview-demo-bot
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
