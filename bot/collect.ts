@@ -110,173 +110,177 @@ const downloadTargets = await Promise.all(
           ? `Branch ${source.branch.name}`
           : `PR #${source.pullRequest.number}`,
       );
-      log.info("Checking...");
-      const {
-        data: { check_runs: checkRuns },
-      } = await octokit.request(
-        "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
-        {
-          owner: mainRepoOwner,
-          repo: mainRepoName,
-          ref:
-            source.type === "branch"
-              ? source.branch.name
-              : source.pullRequest.head.sha,
-        },
-      );
-      const buildPageCheck = checkRuns.find(
-        (checkRun) => checkRun.name === "update_pages",
-      );
-      if (!buildPageCheck) {
-        log.info("No build check found");
-        return;
-      }
-      if (!buildPageCheck.details_url) {
-        log.info("Build check has no details URL");
-        return;
-      }
-      const runId =
-        buildPageCheck.details_url.match(/(?<=\/runs\/)[0-9]+/)?.[0];
-      if (!runId) {
-        log.error(
-          `Failed to extract check run ID from details URL: ${buildPageCheck.details_url}`,
-        );
-        return;
-      }
-      const jobId = buildPageCheck.id;
-      while (true) {
-        const done = await semaphore.lock(async () => {
-          const { data: job } = await octokit.request(
-            "GET /repos/{owner}/{repo}/actions/jobs/{job_id}",
-            {
-              owner: mainRepoOwner,
-              repo: mainRepoName,
-              job_id: jobId,
-            },
-          );
-          if (job.status === "completed") {
-            return true;
-          }
-          log.info`Waiting for job #${jobId} to complete...`;
-          await new Promise((resolve) => setTimeout(resolve, 10000));
-          return false;
-        });
-        if (done) {
-          break;
-        }
-      }
-      if (buildPageCheck.conclusion !== "success") {
-        log.error("Build check did not succeed");
-        return;
-      }
-      const buildPage = await octokit.request(
-        "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
-        {
-          owner: mainRepoOwner,
-          repo: mainRepoName,
-          run_id: Number.parseInt(runId),
-        },
-      );
-      const artifact = buildPage.data.artifacts.find(
-        (artifact) => artifact.name === "page-dist",
-      );
-      if (!artifact) {
-        log.error("No artifact found");
-        return;
-      }
-
-      const downloadUrl = artifact.archive_download_url;
-      if (!downloadUrl) {
-        log.error("No download URL found");
-        return;
-      }
-      log.info`Fetching artifact URL from ${downloadUrl}`;
-
-      const { url: innerDownloadUrl } = await octokit.request(
-        "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
-        {
-          owner: mainRepoOwner,
-          repo: mainRepoName,
-          artifact_id: artifact.id,
-          archive_format: "zip",
-        },
-      );
-
-      log.info`Downloading artifact from ${innerDownloadUrl}`;
-      const response = await fetch(innerDownloadUrl);
-      if (!response.ok) {
-        log.error`Failed to download artifact: ${response.statusText}`;
-        return;
-      }
-      if (!response.body) {
-        log.error("Response has no body");
-        return;
-      }
-      const dirname =
-        source.type === "branch"
-          ? source.branch.name
-          : `pr-${source.pullRequest.number}`;
-      const destination = `${publicDir}/${dirname}`;
-      log.info`Extracting artifact to ${destination}`;
-      await fs.mkdir(destination, { recursive: true });
-      await pipeline(
-        Readable.fromWeb(response.body),
-        unzip.Extract({
-          path: destination,
-        }),
-      );
-      log.info("Done.");
-
-      if (source.type === "pullRequest") {
-        log.info("Fetching comments...");
-        const comments = await octokit.paginate(
-          "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
+      try {
+        log.info("Checking...");
+        const {
+          data: { check_runs: checkRuns },
+        } = await octokit.request(
+          "GET /repos/{owner}/{repo}/commits/{ref}/check-runs",
           {
             owner: mainRepoOwner,
             repo: mainRepoName,
-            issue_number: source.pullRequest.number,
+            ref:
+              source.type === "branch"
+                ? source.branch.name
+                : source.pullRequest.head.sha,
           },
         );
-        const deployInfoMessage = [
-          "<!-- deploy -->",
-          `プレビュー：<https://sevenc7c.com/vv-preview-demo-bot/${dirname}/>`,
-          `更新時点でのコミットハッシュ：[\`${source.pullRequest.head.sha.slice(0, 7)}\`](https://github.com/${
-            source.pullRequest.head.repo.full_name
-          }/commit/${source.pullRequest.head.sha})`,
-        ].join("\n");
-        const maybeDeployInfo = comments.find(
-          (comment) =>
-            comment.user &&
-            appInfo.data &&
-            comment.user.login === `${appInfo.data.slug}[bot]` &&
-            comment.body?.startsWith("<!-- deploy -->"),
+        const buildPageCheck = checkRuns.find(
+          (checkRun) => checkRun.name === "update_pages",
         );
-        if (!maybeDeployInfo) {
-          log.info("Adding deploy info...");
-          await octokit.request(
-            "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+        if (!buildPageCheck) {
+          log.info("No build check found");
+          return;
+        }
+        if (!buildPageCheck.details_url) {
+          log.info("Build check has no details URL");
+          return;
+        }
+        const runId =
+          buildPageCheck.details_url.match(/(?<=\/runs\/)[0-9]+/)?.[0];
+        if (!runId) {
+          log.error(
+            `Failed to extract check run ID from details URL: ${buildPageCheck.details_url}`,
+          );
+          return;
+        }
+        const jobId = buildPageCheck.id;
+        while (true) {
+          const done = await semaphore.lock(async () => {
+            const { data: job } = await octokit.request(
+              "GET /repos/{owner}/{repo}/actions/jobs/{job_id}",
+              {
+                owner: mainRepoOwner,
+                repo: mainRepoName,
+                job_id: jobId,
+              },
+            );
+            if (job.status === "completed") {
+              return true;
+            }
+            log.info`Waiting for job #${jobId} to complete...`;
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+            return false;
+          });
+          if (done) {
+            break;
+          }
+        }
+        if (buildPageCheck.conclusion !== "success") {
+          log.error("Build check did not succeed");
+          return;
+        }
+        const buildPage = await octokit.request(
+          "GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts",
+          {
+            owner: mainRepoOwner,
+            repo: mainRepoName,
+            run_id: Number.parseInt(runId),
+          },
+        );
+        const artifact = buildPage.data.artifacts.find(
+          (artifact) => artifact.name === "page-dist",
+        );
+        if (!artifact) {
+          log.error("No artifact found");
+          return;
+        }
+
+        const downloadUrl = artifact.archive_download_url;
+        if (!downloadUrl) {
+          log.error("No download URL found");
+          return;
+        }
+        log.info`Fetching artifact URL from ${downloadUrl}`;
+
+        const { url: innerDownloadUrl } = await octokit.request(
+          "GET /repos/{owner}/{repo}/actions/artifacts/{artifact_id}/{archive_format}",
+          {
+            owner: mainRepoOwner,
+            repo: mainRepoName,
+            artifact_id: artifact.id,
+            archive_format: "zip",
+          },
+        );
+
+        log.info`Downloading artifact from ${innerDownloadUrl}`;
+        const response = await fetch(innerDownloadUrl);
+        if (!response.ok) {
+          log.error`Failed to download artifact: ${response.statusText}`;
+          return;
+        }
+        if (!response.body) {
+          log.error("Response has no body");
+          return;
+        }
+        const dirname =
+          source.type === "branch"
+            ? source.branch.name
+            : `pr-${source.pullRequest.number}`;
+        const destination = `${publicDir}/${dirname}`;
+        log.info`Extracting artifact to ${destination}`;
+        await fs.mkdir(destination, { recursive: true });
+        await pipeline(
+          Readable.fromWeb(response.body),
+          unzip.Extract({
+            path: destination,
+          }),
+        );
+        log.info("Done.");
+
+        if (source.type === "pullRequest") {
+          log.info("Fetching comments...");
+          const comments = await octokit.paginate(
+            "GET /repos/{owner}/{repo}/issues/{issue_number}/comments",
             {
               owner: mainRepoOwner,
               repo: mainRepoName,
               issue_number: source.pullRequest.number,
-              body: deployInfoMessage,
             },
           );
-        } else {
-          log.info("Updating deploy info...");
-          await octokit.request(
-            "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
-            {
-              owner: mainRepoOwner,
-              repo: mainRepoName,
-              comment_id: maybeDeployInfo.id,
-              body: deployInfoMessage,
-            },
+          const deployInfoMessage = [
+            "<!-- deploy -->",
+            `プレビュー：<https://sevenc7c.com/vv-preview-demo-bot/${dirname}/>`,
+            `更新時点でのコミットハッシュ：[\`${source.pullRequest.head.sha.slice(0, 7)}\`](https://github.com/${
+              source.pullRequest.head.repo.full_name
+            }/commit/${source.pullRequest.head.sha})`,
+          ].join("\n");
+          const maybeDeployInfo = comments.find(
+            (comment) =>
+              comment.user &&
+              appInfo.data &&
+              comment.user.login === `${appInfo.data.slug}[bot]` &&
+              comment.body?.startsWith("<!-- deploy -->"),
           );
+          if (!maybeDeployInfo) {
+            log.info("Adding deploy info...");
+            await octokit.request(
+              "POST /repos/{owner}/{repo}/issues/{issue_number}/comments",
+              {
+                owner: mainRepoOwner,
+                repo: mainRepoName,
+                issue_number: source.pullRequest.number,
+                body: deployInfoMessage,
+              },
+            );
+          } else {
+            log.info("Updating deploy info...");
+            await octokit.request(
+              "PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}",
+              {
+                owner: mainRepoOwner,
+                repo: mainRepoName,
+                comment_id: maybeDeployInfo.id,
+                body: deployInfoMessage,
+              },
+            );
+          }
         }
-      }
 
-      return { source, dirname };
+        return { source, dirname };
+      } catch (e) {
+        log.error`Failed to process: ${e}`;
+      }
     }),
 );
 const successfulDownloads = downloadTargets.filter(
